@@ -1,0 +1,20 @@
+// Test-only Wrangler configuration consumed by apps/worker/vitest.config.ts.
+//
+// Mirrors the production wrangler.jsonc shape but is used solely by the
+// @cloudflare/vitest-pool-workers pool to provision a local miniflare D1
+// binding. The database_id is a stable dummy — miniflare materializes an
+// in-memory SQLite database for it; no remote state is touched.
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "auth2c-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-12",
+  "vars": { "PUBLIC_URL": "https://auth.test" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "auth2c-test",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+    },
+  ],
+}

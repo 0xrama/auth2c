@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "auth2c",
+  "main": "apps/worker/src/index.ts",
+  "compatibility_date": "2026-07-12",
+  // Replace the example domain and database ID before a remote deployment.
+  "routes": [{ "pattern": "auth.example.com", "custom_domain": true }],
+  "vars": { "PUBLIC_URL": "https://auth.example.com" },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "auth2c-production", "database_id": "00000000-0000-0000-0000-000000000000" },
+  ],
+  "triggers": { "crons": ["0 */6 * * *"] },
+}

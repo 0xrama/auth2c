@@ -1,0 +1,12 @@
+# Auth2C Worker local development bindings.
+# Copy to `.dev.vars` (gitignored) and fill in real values. See docs/local-development.md.
+# PUBLIC_URL is also set as a var in wrangler.jsonc; set it here for local dev.
+
+PUBLIC_URL=http://localhost:8787
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+# 32 random bytes, e.g. `openssl rand -hex 32`
+PAIRWISE_SECRET=
+# ES256 (P-256) JWK pair; generate with the commands in docs/local-development.md
+PRIVATE_JWK=
+PUBLIC_JWK=

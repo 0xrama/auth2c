@@ -1,0 +1,8 @@
+node_modules
+dist
+.wrangler
+.dev.vars
+package-lock.json
+apps/server/dist
+# Minified hosted browser SDK is a single intentionally-packed template literal.
+apps/worker/src/client.ts

@@ -1,0 +1,110 @@
+name: Release
+
+# Manually dispatched, gated production deployment. Run only after the CI
+# workflow has passed on the exact commit being released. The `production`
+# environment must be configured in GitHub with required reviewers and the
+# scoped secrets below.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type 'deploy' to deploy to production"
+        required: true
+        default: "stage"
+
+concurrency:
+  group: release-production
+  cancel-in-progress: false
+
+jobs:
+  # Re-run the full verification suite on the release commit. This does not
+  # depend on the CI workflow's status check (branch protections should also
+  # require CI); it guarantees the deployed commit is internally consistent.
+  verify:
+    name: Verify release commit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run deploy:dry-run
+
+  deploy:
+    name: Deploy Worker + migrations
+    runs-on: ubuntu-latest
+    needs: verify
+    environment: production
+    # The deploy only runs when dispatched with the explicit confirmation and
+    # the production environment's reviewers have approved.
+    if: ${{ github.event.inputs.confirm == 'deploy' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+
+      - name: List pending D1 migrations (remote)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler d1 migrations list auth2c-production --remote
+
+      - name: Apply D1 migrations (remote)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run db:migrate
+
+      - name: Deploy Worker (dry-run)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy --dry-run
+
+      - name: Deploy Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run deploy
+
+      - name: Smoke test discovery + JWKS + SDK
+        env:
+          BASE: https://auth.0xrama.xyz
+        run: |
+          set -e
+          curl -fsS "$BASE/.well-known/openid-configuration" | jq -e '.issuer == "'"$BASE"'"'
+          curl -fsS "$BASE/.well-known/jwks.json" | jq -e '.keys[0].alg == "ES256" and .keys[0].kid == "auth2c-v1"'
+          curl -fsS "$BASE/auth2c.js" | head -c 20 | grep -q '(function'
+          echo "smoke checks passed"
+
+  publish:
+    name: Publish SDK packages
+    runs-on: ubuntu-latest
+    needs: deploy
+    environment: production
+    if: ${{ github.event.inputs.confirm == 'deploy' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm run build
+      # Scoped, not first-class; adjust automation or publish manually as needed.
+      - run: npm publish -w @auth2c/auth --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm publish -w @auth2c/react --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
